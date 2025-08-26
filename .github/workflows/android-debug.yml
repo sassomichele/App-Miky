@@ -2,6 +2,9 @@ name: Android Debug APK
 
 on:
   workflow_dispatch: {}
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -31,11 +34,15 @@ jobs:
 
       - name: Install Android platform & build-tools
         run: |
-          sdkmanager "platform-tools" "cmdline-tools;latest" \
-                     "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "platform-tools" "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Ensure Android project exists
+      - name: Ensure Android project (create if missing)
         run: flutter create . --platforms=android
+
+      - name: Link SDK (local.properties)
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          cat android/local.properties
 
       - name: Patch Android versions (minSdk 21, compileSdk 34)
         run: |
@@ -55,28 +62,39 @@ jobs:
           fi
 
       - name: Flutter doctor
-        run: flutter doctor -v
+        run: flutter doctor -v | tee flutter_doctor.log
 
       - name: Flutter pub get
-        run: flutter pub get
+        run: flutter pub get | tee flutter_pub_get.log
 
-      - name: Build APK (debug)
-        run: flutter build apk --debug --verbose
+      - name: Build APK (debug) — capture log
+        run: flutter build apk --debug --verbose | tee flutter_build.log
 
-      - name: Upload APK artifact
+      - name: Fallback Gradle assembleDebug (se Flutter fallisce)
+        if: failure()
+        run: |
+          cd android
+          chmod +x gradlew || true
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon --warning-mode all | tee ../gradle_build.log
+
+      - name: Upload APK artifact (qualsiasi percorso)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug.apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
-        # non caricare nulla se l'APK non esiste
-        if: ${{ success() }}
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
 
-      - name: Upload build logs on failure
-        if: ${{ failure() }}
+      - name: Upload build logs (sempre)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
-            ./**/build/**/*
-            android/**/build/**/*
+            flutter_doctor.log
+            flutter_pub_get.log
+            flutter_build.log
+            gradle_build.log
           if-no-files-found: warn
