@@ -17,11 +17,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter (stable)
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          cache: true
+      - - name: Setup Flutter (3.22.2)
+  uses: subosito/flutter-action@v2
+  with:
+    flutter-version: '3.22.2'
+    cache: true
+
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -37,12 +38,17 @@ jobs:
       - name: Ensure Android project exists
         run: flutter create . --platforms=android
 
-      - name: Patch Android versions (minSdk 21, compileSdk 34)
-        run: |
-          if [ -f android/app/build.gradle ]; then
-            sed -i 's/minSdkVersion *[0-9][0-9]*/minSdkVersion 21/g' android/app/build.gradle || true
-            sed -i 's/compileSdkVersion *[0-9][0-9]*/compileSdkVersion 34/g' android/app/build.gradle || true
-          fi
+      - name: - name: Patch Android versions (minSdk 21, compileSdk 34)
+  run: |
+    if [ -f android/app/build.gradle ]; then
+      # Formato nuovo AGP (compileSdk / minSdk)
+      sed -i 's/compileSdk *[0-9][0-9]*/compileSdk 34/g' android/app/build.gradle || true
+      sed -i 's/minSdk *[0-9][0-9]*/minSdk 21/g' android/app/build.gradle || true
+      # Formato vecchio AGP (compileSdkVersion / minSdkVersion)
+      sed -i 's/compileSdkVersion *[0-9][0-9]*/compileSdkVersion 34/g' android/app/build.gradle || true
+      sed -i 's/minSdkVersion *[0-9][0-9]*/minSdkVersion 21/g' android/app/build.gradle || true
+    fi
+
 
       - name: Ensure lib/main.dart (fallback)
         run: |
