@@ -2,10 +2,6 @@ name: Android Debug APK
 
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - main
-      - master
 
 jobs:
   build:
@@ -21,7 +17,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Setup Flutter (stable)
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
@@ -33,41 +29,22 @@ jobs:
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
 
-      # Installa varie versioni in modo tollerante (evita errori di disponibilità)
-      - name: Install Android platform & build-tools (tollerante)
+      - name: Install Android platform & build-tools
         run: |
-          sdkmanager "platform-tools" || true
-          sdkmanager "cmdline-tools;latest" || true
-          sdkmanager "platforms;android-34" || true
-          sdkmanager "build-tools;35.0.0" || true
-          sdkmanager "build-tools;34.0.2" || true
-          sdkmanager "build-tools;34.0.0" || true
+          sdkmanager "platform-tools" "cmdline-tools;latest" \
+                     "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Ensure Android project exists (first time)
+      - name: Ensure Android project exists
         run: flutter create . --platforms=android
 
-      # Imposta AndroidX e memoria gradle (evita crash di gradle)
-      - name: Ensure gradle.properties
-        run: |
-          mkdir -p android
-          GP=android/gradle.properties
-          touch "$GP"
-          grep -q "android.useAndroidX" "$GP" || echo "android.useAndroidX=true" >> "$GP"
-          grep -q "android.enableJetifier" "$GP" || echo "android.enableJetifier=true" >> "$GP"
-          grep -q "org.gradle.jvmargs" "$GP" || echo "org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" >> "$GP"
-
-      # Forza minSdk 21 e target/compile 34 (compatibile con plugin come sqflite)
-      - name: Patch Android sdk versions
+      - name: Patch Android versions (minSdk 21, compileSdk 34)
         run: |
           if [ -f android/app/build.gradle ]; then
             sed -i 's/minSdkVersion *[0-9][0-9]*/minSdkVersion 21/g' android/app/build.gradle || true
-          fi
-          if [ -f android/app/build.gradle ]; then
             sed -i 's/compileSdkVersion *[0-9][0-9]*/compileSdkVersion 34/g' android/app/build.gradle || true
           fi
 
-      # Se manca lib/main.dart, crea un main minimale per non far fallire la build
-      - name: Ensure lib/main.dart exists (fallback)
+      - name: Ensure lib/main.dart (fallback)
         run: |
           if [ ! -f lib/main.dart ]; then
             mkdir -p lib
@@ -83,33 +60,23 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # Tenta la build Flutter; se fallisce, prova direttamente Gradle
-      - name: Build APK (debug, con fallback Gradle)
-        run: |
-          set -e
-          flutter clean || true
-          flutter build apk --debug --verbose --no-shrink || (
-            echo "Flutter build failed, provo Gradle assembleDebug…"
-            cd android
-            chmod +x gradlew || true
-            ./gradlew :app:assembleDebug --stacktrace --no-daemon --warning-mode all
-          )
+      - name: Build APK (debug)
+        run: flutter build apk --debug --verbose
 
-      # Carica l'APK da qualunque dei due percorsi
-      - name: Upload artifact (APK)
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug.apk
-          path: |
-            build/app/outputs/flutter-apk/app-debug.apk
-            android/app/build/outputs/apk/debug/app-debug.apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+        # non caricare nulla se l'APK non esiste
+        if: ${{ success() }}
 
-      # In caso di errore, carica anche log/outputs per diagnostica
-      - name: Upload build logs
-        if: always()
+      - name: Upload build logs on failure
+        if: ${{ failure() }}
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: |
-            build/**/outputs/**/*
-            android/**/build/**/outputs/**/*
+            ./**/build/**/*
+            android/**/build/**/*
+          if-no-files-found: warn
