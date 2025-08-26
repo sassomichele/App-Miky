@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +40,14 @@ jobs:
       - name: Ensure Android project exists (first time)
         run: flutter create . --platforms=android
 
+      # Patch minSdkVersion=21 (necessario per plugin come sqflite)
+      - name: Force minSdkVersion 21
+        run: |
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/minSdkVersion *[0-9][0-9]*/minSdkVersion 21/g' android/app/build.gradle || true
+          fi
+
+      # Fallback: se lib/main.dart manca, creane uno minimale per non far fallire la build
       - name: Ensure lib/main.dart exists (fallback)
         run: |
           if [ ! -f lib/main.dart ]; then
@@ -49,14 +58,20 @@ jobs:
             EOF
           fi
 
+      - name: Flutter doctor (diagnostica)
+        run: flutter doctor -v
+
       - name: Flutter pub get
         run: flutter pub get
 
       - name: Build APK (debug)
-        run: flutter build apk --debug
+        run: flutter build apk --debug --verbose
 
       - name: Upload artifact (APK)
         uses: actions/upload-artifact@v4
         with:
+          name: app-debug.apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+
           name: app-debug.apk
           path: build/app/outputs/flutter-apk/app-debug.apk
