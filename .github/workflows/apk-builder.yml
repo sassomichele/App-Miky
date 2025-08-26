@@ -1,0 +1,11 @@
+name: APK Builder
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hello
+        run: echo "Workflow OK"
