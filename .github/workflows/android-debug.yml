@@ -33,33 +33,40 @@ jobs:
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
 
+      # Installa varie versioni in modo tollerante (evita errori di disponibilità)
       - name: Install Android platform & build-tools (tollerante)
         run: |
-          sdkmanager "platform-tools" "platforms;android-34" || true
+          sdkmanager "platform-tools" || true
+          sdkmanager "cmdline-tools;latest" || true
+          sdkmanager "platforms;android-34" || true
           sdkmanager "build-tools;35.0.0" || true
           sdkmanager "build-tools;34.0.2" || true
           sdkmanager "build-tools;34.0.0" || true
-          sdkmanager "cmdline-tools;latest" || true
 
       - name: Ensure Android project exists (first time)
         run: flutter create . --platforms=android
 
-      - name: Ensure gradle.properties (AndroidX + memoria)
+      # Imposta AndroidX e memoria gradle (evita crash di gradle)
+      - name: Ensure gradle.properties
         run: |
           mkdir -p android
-          mkdir -p android/app
           GP=android/gradle.properties
           touch "$GP"
           grep -q "android.useAndroidX" "$GP" || echo "android.useAndroidX=true" >> "$GP"
           grep -q "android.enableJetifier" "$GP" || echo "android.enableJetifier=true" >> "$GP"
           grep -q "org.gradle.jvmargs" "$GP" || echo "org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8" >> "$GP"
 
-      - name: Patch minSdkVersion=21 (per plugin tipo sqflite)
+      # Forza minSdk 21 e target/compile 34 (compatibile con plugin come sqflite)
+      - name: Patch Android sdk versions
         run: |
           if [ -f android/app/build.gradle ]; then
             sed -i 's/minSdkVersion *[0-9][0-9]*/minSdkVersion 21/g' android/app/build.gradle || true
           fi
+          if [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdkVersion *[0-9][0-9]*/compileSdkVersion 34/g' android/app/build.gradle || true
+          fi
 
+      # Se manca lib/main.dart, crea un main minimale per non far fallire la build
       - name: Ensure lib/main.dart exists (fallback)
         run: |
           if [ ! -f lib/main.dart ]; then
@@ -70,18 +77,39 @@ jobs:
             EOF
           fi
 
-      - name: Flutter doctor (diagnostica)
+      - name: Flutter doctor
         run: flutter doctor -v
 
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Build APK (debug, verbose)
-        run: flutter build apk --debug --verbose
+      # Tenta la build Flutter; se fallisce, prova direttamente Gradle
+      - name: Build APK (debug, con fallback Gradle)
+        run: |
+          set -e
+          flutter clean || true
+          flutter build apk --debug --verbose --no-shrink || (
+            echo "Flutter build failed, provo Gradle assembleDebug…"
+            cd android
+            chmod +x gradlew || true
+            ./gradlew :app:assembleDebug --stacktrace --no-daemon --warning-mode all
+          )
 
+      # Carica l'APK da qualunque dei due percorsi
       - name: Upload artifact (APK)
         uses: actions/upload-artifact@v4
         with:
           name: app-debug.apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk
 
+      # In caso di errore, carica anche log/outputs per diagnostica
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/**/outputs/**/*
+            android/**/build/**/outputs/**/*
