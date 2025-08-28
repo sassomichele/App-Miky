@@ -9,7 +9,16 @@
   run: flutter build apk --debug --verbose | tee flutter_build.log
   - name: List outputs (after build)
   if: always()
-  run: |
+  run: |- name: Upload APK (match globale)
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: app-debug.apk
+    path: |
+      **/*.apk
+      **/outputs/**/*.apk
+    if-no-files-found: warn
+
     echo "== POST-BUILD: ls build =="
     ls -R build || true
     echo "== POST-BUILD: ls android/app/build/outputs =="
