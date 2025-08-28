@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+void main() => runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('Build OK')))));
 
 import 'package:flutter/material.dart';
 import '../../src/db_helper.dart';
