@@ -5,6 +5,19 @@
     ls -R build || true
     echo "== PRE-BUILD: ls android/app/build/outputs =="
     ls -R android/app/build/outputs || true
+    - name: Build APK (debug)
+  run: flutter build apk --debug --verbose | tee flutter_build.log
+  - name: List outputs (after build)
+  if: always()
+  run: |
+    echo "== POST-BUILD: ls build =="
+    ls -R build || true
+    echo "== POST-BUILD: ls android/app/build/outputs =="
+    ls -R android/app/build/outputs || true
+    echo "== POST-BUILD: find . -type f -name \"*.apk\" =="
+    find . -type f -name "*.apk" -print || true
+
+
 name: Android Debug APK
 
 on:
