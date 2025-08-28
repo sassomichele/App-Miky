@@ -1,3 +1,10 @@
+- name: List existing outputs (before build)
+  if: always()
+  run: |
+    echo "== PRE-BUILD: ls build =="
+    ls -R build || true
+    echo "== PRE-BUILD: ls android/app/build/outputs =="
+    ls -R android/app/build/outputs || true
 name: Android Debug APK
 
 on:
